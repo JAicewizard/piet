@@ -9,3 +9,4 @@ Cargo.lock
 .idea/
 ## VScode project configuration files
 .vscode/
+snapshots

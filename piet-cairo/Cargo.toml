@@ -13,7 +13,7 @@ categories = ["rendering::graphics-api"]
 [dependencies]
 piet = { version = "0.4.0", path = "../piet" }
 
-cairo-rs = { version = "0.9.1", default-features = false } # We don't need glib
+cairo-rs = { git = "https://github.com/gtk-rs/gtk-rs-core", package = "cairo-rs", default_features = false, features = ["xcb"] }
 pango = { version = "0.9.1", features = ["v1_44"] }
 pango-sys = { version = "0.10.0", features = ["v1_44"] }
 pangocairo = "0.10.0"
@@ -23,4 +23,4 @@ xi-unicode = "0.3.0"
 
 [dev-dependencies]
 piet = { version = "0.4.0", path = "../piet", features = ["samples"] }
-cairo-rs = { version = "0.9.1", default-features = false, features = ["png"] }
+cairo-rs = { git = "https://github.com/gtk-rs/gtk-rs-core", package = "cairo-rs", default-features = false, features = ["png"] }
