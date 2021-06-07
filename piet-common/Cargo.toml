@@ -40,8 +40,8 @@ png = { version = "0.16.1", optional = true }
 
 [target.'cfg(target_os="linux")'.dependencies]
 piet-cairo = { version = "0.4.0", path = "../piet-cairo" }
-cairo-rs = { git = "https://github.com/gtk-rs/gtk-rs-core", package = "cairo-rs", default_features = false, features = ["xcb"] }
-cairo-sys-rs = { git = "https://github.com/gtk-rs/gtk-rs-core", package = "cairo-sys-rs", optional = true }
+cairo-rs = { git = "https://github.com/gtk-rs/gtk-rs-core", default_features = false, features = ["xcb"] }
+cairo-sys-rs = { git = "https://github.com/gtk-rs/gtk-rs-core" }
 
 [target.'cfg(target_os="macos")'.dependencies]
 piet-coregraphics = { version = "0.4.0", path = "../piet-coregraphics" }

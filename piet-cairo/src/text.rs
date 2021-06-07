@@ -5,11 +5,12 @@ use std::fmt;
 use std::ops::{Range, RangeBounds};
 use std::rc::Rc;
 
-use glib::translate::{from_glib_full, ToGlibPtr};
+use glib::translate::ToGlibPtr;
 
-use pango::{AttrList, FontMapExt};
-use pango_sys::pango_attr_insert_hyphens_new;
-use pangocairo::FontMap;
+use pango::Attribute;
+use pangocairo::pango::AttrList;
+use pangocairo::prelude::FontMap;
+use pangocairo::prelude::FontMapExt;
 
 use piet::kurbo::{Point, Rect, Size, Vec2};
 use piet::{
@@ -17,13 +18,13 @@ use piet::{
     TextAlignment, TextAttribute, TextLayout, TextLayoutBuilder, TextStorage,
 };
 
-type PangoLayout = pango::Layout;
-type PangoContext = pango::Context;
-type PangoAttribute = pango::Attribute;
-type PangoWeight = pango::Weight;
-type PangoStyle = pango::Style;
-type PangoUnderline = pango::Underline;
-type PangoAlignment = pango::Alignment;
+type PangoLayout = pangocairo::pango::Layout;
+type PangoContext = pangocairo::pango::Context;
+type PangoAttribute = pangocairo::pango::Attribute;
+type PangoWeight = pangocairo::pango::Weight;
+type PangoStyle = pangocairo::pango::Style;
+type PangoUnderline = pangocairo::pango::Underline;
+type PangoAlignment = pangocairo::pango::Alignment;
 
 const PANGO_SCALE: f64 = pango::SCALE as f64;
 const UNBOUNDED_WRAP_WIDTH: i32 = -1;
@@ -70,12 +71,12 @@ impl AttributeWithRange {
                  * NOTE: If the family fails to resolve we just don't apply the attribute.
                  * That allows Pango to use its default font of choice to render that text
                  */
-                PangoAttribute::new_family(family)?
+                PangoAttribute::new_family(family)
             }
 
             TextAttribute::FontSize(size) => {
                 let size = (size * PANGO_SCALE) as i32;
-                PangoAttribute::new_size_absolute(size).unwrap()
+                PangoAttribute::new_size_absolute(size)
             }
 
             TextAttribute::Weight(weight) => {
@@ -106,7 +107,7 @@ impl AttributeWithRange {
                     }
                 }
 
-                PangoAttribute::new_weight(pango_weights[closest_index].1).unwrap()
+                PangoAttribute::new_weight(pango_weights[closest_index].1)
             }
 
             TextAttribute::TextColor(text_color) => {
@@ -116,7 +117,6 @@ impl AttributeWithRange {
                     (g as u16 * 256) + (g as u16),
                     (b as u16 * 256) + (b as u16),
                 )
-                .unwrap()
             }
 
             TextAttribute::Style(style) => {
@@ -124,7 +124,7 @@ impl AttributeWithRange {
                     FontStyle::Regular => PangoStyle::Normal,
                     FontStyle::Italic => PangoStyle::Italic,
                 };
-                PangoAttribute::new_style(style).unwrap()
+                PangoAttribute::new_style(style)
             }
 
             &TextAttribute::Underline(underline) => {
@@ -133,11 +133,11 @@ impl AttributeWithRange {
                 } else {
                     PangoUnderline::None
                 };
-                PangoAttribute::new_underline(underline).unwrap()
+                PangoAttribute::new_underline(underline)
             }
 
             &TextAttribute::Strikethrough(strikethrough) => {
-                PangoAttribute::new_strikethrough(strikethrough).unwrap()
+                PangoAttribute::new_strikethrough(strikethrough)
             }
         };
 
@@ -154,7 +154,7 @@ impl CairoText {
     /// Create a new factory that satisfies the piet `Text` trait.
     #[allow(clippy::new_without_default)]
     pub fn new() -> CairoText {
-        let fontmap = FontMap::get_default().unwrap();
+        let fontmap = FontMap::default().unwrap();
         CairoText {
             pango_context: fontmap.create_context().unwrap(),
         }
@@ -284,9 +284,7 @@ impl TextLayoutBuilder for CairoTextLayoutBuilder {
             }
         };
 
-        if let Some(attr) = unsafe { from_glib_full(pango_attr_insert_hyphens_new(0)) } {
-            pango_attributes.insert(attr);
-        }
+        pango_attributes.insert(Attribute::new_insert_hyphens(false));
 
         add_attribute(
             AttributeWithRange {
@@ -343,8 +341,10 @@ impl TextLayoutBuilder for CairoTextLayoutBuilder {
         }
 
         self.pango_layout.set_attributes(Some(&pango_attributes));
-        self.pango_layout.set_wrap(pango::WrapMode::WordChar);
-        self.pango_layout.set_ellipsize(pango::EllipsizeMode::None);
+        self.pango_layout
+            .set_wrap(pangocairo::pango::WrapMode::WordChar);
+        self.pango_layout
+            .set_ellipsize(pangocairo::pango::EllipsizeMode::None);
 
         // invalid until update_width() is called
         let mut layout = CairoTextLayout {
@@ -415,7 +415,7 @@ impl TextLayout for CairoTextLayout {
 
         let line = self
             .pango_layout
-            .get_line(line_number.try_into().unwrap())
+            .line(line_number.try_into().unwrap())
             .unwrap();
 
         let line_text = self.line_text(line_number).unwrap();
@@ -425,8 +425,12 @@ impl TextLayout for CairoTextLayout {
         // FIXME: when https://github.com/gtk-rs/gtk-rs/pull/375 is released
         // we can improve this.
         let (rel_idx, is_inside_x) = match line.x_to_index(x as i32) {
-            Some((idx, trailing)) => {
-                let idx = idx as usize - line_start_idx;
+            pangocairo::pango::HitPosition {
+                index,
+                trailing,
+                is_inside: true,
+            } => {
+                let idx = index as usize - line_start_idx;
                 let trailing_len: usize = (&line_text[idx..])
                     .chars()
                     .take(trailing as usize)
@@ -434,7 +438,11 @@ impl TextLayout for CairoTextLayout {
                     .sum();
                 (idx + trailing_len, true)
             }
-            None => {
+            pangocairo::pango::HitPosition {
+                index,
+                trailing,
+                is_inside: false,
+            } => {
                 let hit_is_left = x <= 0;
                 let hard_break_len = match line_text.as_bytes() {
                     [.., b'\r', b'\n'] => 2,
@@ -492,6 +500,51 @@ impl TextLayout for CairoTextLayout {
 
         HitTestPosition::new(point, line_number)
     }
+
+    fn rects_for_range(&self, range: impl RangeBounds<usize>) -> Vec<Rect> {
+        let text_len = self.text().len();
+        let mut range = util::resolve_range(range, text_len);
+        range.start = range.start.min(text_len);
+        range.end = range.end.min(text_len);
+
+        if range.start >= range.end {
+            return Vec::new();
+        }
+
+        let first_line = self.hit_test_text_position(range.start).line;
+        let last_line = self.hit_test_text_position(range.end).line;
+
+        let mut result = Vec::new();
+
+        for line in first_line..=last_line {
+            let metrics = self.line_metric(line).unwrap();
+            let y0 = metrics.y_offset;
+            let y1 = y0 + metrics.height;
+            let line_range_start = if line == first_line {
+                range.start
+            } else {
+                metrics.start_offset
+            };
+
+            let line_range_end = if line == last_line {
+                range.end
+            } else {
+                metrics.end_offset - metrics.trailing_whitespace
+            };
+
+            let start_x = self.hit_test_text_position(line_range_start).point.x;
+            //HACK: because we don't have affinity, if the line has an emergency
+            //break we need to manually use the layout width as the end point
+            //for the selection rect. See https://github.com/linebender/piet/issues/323
+            let end_x = if line != last_line && metrics.trailing_whitespace == 0 {
+                self.size().width
+            } else {
+                self.hit_test_text_position(line_range_end).point.x
+            };
+            result.push(Rect::new(start_x, y0, end_x, y1));
+        }
+        result
+    }
 }
 
 impl CairoTextLayout {
@@ -515,9 +568,9 @@ impl CairoTextLayout {
         let mut y_offset = 0.;
         let mut widest_logical_width = 0;
         let mut widest_whitespaceless_width = 0;
-        let mut iterator = self.pango_layout.get_iter().unwrap();
+        let mut iterator = self.pango_layout.iter().unwrap();
         loop {
-            let line = iterator.get_line_readonly().unwrap();
+            let line = iterator.line_readonly().unwrap();
 
             //FIXME: replace this when pango 0.10.0 lands
             let (start_offset, end_offset) = unsafe {
@@ -536,7 +589,7 @@ impl CairoTextLayout {
                 _ => end_offset,
             };
 
-            let logical_rect = iterator.get_line_extents().1;
+            let logical_rect = iterator.line_extents().1;
             if logical_rect.width > widest_logical_width {
                 widest_logical_width = logical_rect.width;
             }
@@ -559,7 +612,7 @@ impl CairoTextLayout {
                 start_offset,
                 end_offset,
                 trailing_whitespace,
-                baseline: (iterator.get_baseline() as f64 / PANGO_SCALE) - y_offset,
+                baseline: (iterator.baseline() as f64 / PANGO_SCALE) - y_offset,
                 height: logical_rect.height as f64 / PANGO_SCALE,
                 y_offset,
             });
@@ -574,7 +627,7 @@ impl CairoTextLayout {
         self.line_metrics = line_metrics.into();
         self.x_offsets = x_offsets.into();
 
-        let (ink_extent, logical_extent) = self.pango_layout.get_extents();
+        let (ink_extent, logical_extent) = self.pango_layout.extents();
         let ink_extent = to_kurbo_rect(ink_extent);
         let logical_extent = to_kurbo_rect(logical_extent);
 
@@ -589,7 +642,7 @@ impl CairoTextLayout {
     }
 }
 
-fn to_kurbo_rect(r: pango::Rectangle) -> Rect {
+fn to_kurbo_rect(r: pangocairo::pango::Rectangle) -> Rect {
     Rect::from_origin_size(
         (r.x as f64 / PANGO_SCALE, r.y as f64 / PANGO_SCALE),
         (r.width as f64 / PANGO_SCALE, r.height as f64 / PANGO_SCALE),
