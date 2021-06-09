@@ -1122,4 +1122,16 @@ mod test {
         let mut text = D2DText::new_for_test();
         assert!(text.font_family("A Quite Unlikely Font Ñame").is_none());
     }
+
+    #[test]
+    fn missing_font_is_missing() {
+        let a_font = FontFamily::new_unchecked("Segoe UI");
+        let mut factory = D2DText::new_for_test();
+
+        let layout = factory
+            .new_text_layout("g\0")
+            .font(a_font, 22.0)
+            .build()
+            .unwrap();
+    }
 }
