@@ -1124,7 +1124,7 @@ mod test {
     }
 
     #[test]
-    fn missing_font_is_missing() {
+    fn panic_on_null() {
         let a_font = FontFamily::new_unchecked("Segoe UI");
         let mut factory = D2DText::new_for_test();
 
