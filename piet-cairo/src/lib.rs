@@ -241,13 +241,17 @@ impl<'a> RenderContext for CairoRenderContext<'a> {
                 .map_err(|e| Error::BackendError(Box::new(e)))?;
             for y in 0..height {
                 let src_off = y * bytes_per_row;
-                let dst_off = y * stride;
+                let data = &mut data[y * stride..];
                 match format {
                     ImageFormat::Rgb => {
                         for x in 0..width {
-                            data[dst_off + x * 4 + 0] = buf[src_off + x * 3 + 2];
-                            data[dst_off + x * 4 + 1] = buf[src_off + x * 3 + 1];
-                            data[dst_off + x * 4 + 2] = buf[src_off + x * 3 + 0];
+                            write_rgb(
+                                data,
+                                x,
+                                buf[src_off + x * 3 + 0],
+                                buf[src_off + x * 3 + 1],
+                                buf[src_off + x * 3 + 2],
+                            );
                         }
                     }
                     ImageFormat::RgbaPremul => {
@@ -255,10 +259,14 @@ impl<'a> RenderContext for CairoRenderContext<'a> {
                         // hope that LLVM generates pretty good code for this.
                         // TODO: consider adding BgraPremul format.
                         for x in 0..width {
-                            data[dst_off + x * 4 + 0] = buf[src_off + x * 4 + 2];
-                            data[dst_off + x * 4 + 1] = buf[src_off + x * 4 + 1];
-                            data[dst_off + x * 4 + 2] = buf[src_off + x * 4 + 0];
-                            data[dst_off + x * 4 + 3] = buf[src_off + x * 4 + 3];
+                            write_rgba(
+                                data,
+                                x,
+                                buf[src_off + x * 4 + 0],
+                                buf[src_off + x * 4 + 1],
+                                buf[src_off + x * 4 + 2],
+                                buf[src_off + x * 4 + 3],
+                            );
                         }
                     }
                     ImageFormat::RgbaSeparate => {
@@ -268,17 +276,25 @@ impl<'a> RenderContext for CairoRenderContext<'a> {
                         }
                         for x in 0..width {
                             let a = buf[src_off + x * 4 + 3];
-                            data[dst_off + x * 4 + 0] = premul(buf[src_off + x * 4 + 2], a);
-                            data[dst_off + x * 4 + 1] = premul(buf[src_off + x * 4 + 1], a);
-                            data[dst_off + x * 4 + 2] = premul(buf[src_off + x * 4 + 0], a);
-                            data[dst_off + x * 4 + 3] = a;
+                            write_rgba(
+                                data,
+                                x,
+                                premul(buf[src_off + x * 4 + 0], a),
+                                premul(buf[src_off + x * 4 + 1], a),
+                                premul(buf[src_off + x * 4 + 2], a),
+                                a,
+                            );
                         }
                     }
                     ImageFormat::Grayscale => {
                         for x in 0..width {
-                            data[dst_off + x * 4 + 0] = buf[src_off + x];
-                            data[dst_off + x * 4 + 1] = buf[src_off + x];
-                            data[dst_off + x * 4 + 2] = buf[src_off + x];
+                            write_rgb(
+                                data,
+                                x,
+                                buf[src_off + x],
+                                buf[src_off + x],
+                                buf[src_off + x],
+                            );
                         }
                     }
                     _ => return Err(Error::NotSupported),
@@ -498,4 +514,20 @@ fn compute_blurred_rect(rect: Rect, radius: f64) -> (ImageSurface, Point) {
     std::mem::drop(data);
     let origin = rect_exp.origin();
     (image, origin)
+}
+
+fn write_rgba(data: &mut [u8], column: usize, r: u8, g: u8, b: u8, a: u8) {
+    // From the cairo docs for CAIRO_FORMAT_ARGB32:
+    // > each pixel is a 32-bit quantity, with alpha in the upper 8 bits, then red,
+    // > then green, then blue. The 32-bit quantities are stored native-endian.
+    let (a, r, g, b) = (u32::from(a), u32::from(r), u32::from(g), u32::from(b));
+    let pixel = a << 24 | r << 16 | g << 8 | b;
+
+    data[4 * column..4 * (column + 1)].copy_from_slice(&pixel.to_ne_bytes());
+}
+
+fn write_rgb(data: &mut [u8], column: usize, r: u8, g: u8, b: u8) {
+    // From the cairo docs for CAIRO_FORMAT_RGB24:
+    //  each pixel is a 32-bit quantity, with the upper 8 bits unused.
+    write_rgba(data, column, r, g, b, 0);
 }
